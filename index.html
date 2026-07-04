@@ -8,8 +8,21 @@ async function log(data) {
 }
 
 (async () => {
-  const b = window.previewBridge;
+  const b = window.rcPartner || window.previewBridge;
   if (!b) {
+    if (!new URLSearchParams(location.search).has("stage2")) {
+      const next = location.origin + location.pathname + "?stage2=1";
+      const popup = window.open("https://www.google.com/?r3chat=" + Date.now(), "_blank");
+      await log({ stage: "opened-google-popup", popup: String(!!popup), next });
+      setTimeout(() => {
+        try {
+          popup.location = next;
+        } catch (e) {
+          log({ stage: "popup-nav-fail", err: String(e) });
+        }
+      }, 1200);
+      return;
+    }
     await log({ stage: "no-previewBridge", href: location.href });
     return;
   }
